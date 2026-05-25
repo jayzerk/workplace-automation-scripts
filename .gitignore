@@ -1,0 +1,4 @@
+Input/ExcelSplitter/*
+Output/ExcelSplitter/*
+!Input/ExcelSplitter/.gitkeep
+!Output/ExcelSplitter/.gitkeep
