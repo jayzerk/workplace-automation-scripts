@@ -1,4 +1,33 @@
 Input/ExcelSplitter/*
+Input/CBT/*
 Output/ExcelSplitter/*
+Output/CBT/*
+
 !Input/ExcelSplitter/.gitkeep
+!Input/CBT/.gitkeep
 !Output/ExcelSplitter/.gitkeep
+!Output/CBT/.gitkeep
+
+# PyInstaller build output
+build/
+dist/
+
+# Python cache files
+__pycache__/
+*.py[cod]
+.venv/
+
+# Local environment settings
+.env
+.env.*
+*.xlsx
+*.xls
+*.xlsm
+*.csv
+*.tsv
+.env
+.env.*
+*.pem
+*.key
+*.pfx
+*.p12
