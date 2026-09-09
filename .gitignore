@@ -2,20 +2,32 @@ Input/ExcelSplitter/*
 Input/CBT/*
 Output/ExcelSplitter/*
 Output/CBT/*
+Output/GeographicCleaner/*
+Data/*
 
 !Input/ExcelSplitter/.gitkeep
 !Input/CBT/.gitkeep
 !Output/ExcelSplitter/.gitkeep
 !Output/CBT/.gitkeep
+!Output/GeographicCleaner/.gitkeep
+!Data/.gitkeep
 
 # PyInstaller build output
 build/
 dist/
+build_stage/
+dist_stage/
+build_secure/
+dist_secure/
+build_release/
+dist_release/
 
 # Python cache files
 __pycache__/
 *.py[cod]
 .venv/
+.audit-cache/
+.audit-tmp/
 
 # Local environment settings
 .env

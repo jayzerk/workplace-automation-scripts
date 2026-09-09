@@ -11,6 +11,8 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from Scripts.excel_tools import consolidate_cbt, split_excel
+from Scripts.geographic_cleaner import clean_geographic_names
+from Scripts.queue_board import QueueBoard
 
 
 def application_dir() -> Path:
@@ -20,12 +22,20 @@ def application_dir() -> Path:
     return Path(__file__).resolve().parent
 
 
+def application_startup_command() -> str:
+    """Return the exact command registered for explicit launch at sign-in."""
+    executable = Path(sys.executable).resolve()
+    if getattr(sys, "frozen", False):
+        return f'"{executable}"'
+    return f'"{executable}" "{Path(__file__).resolve()}"'
+
+
 class ExcelToolsApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Excel Tools")
-        self.geometry("780x520")
-        self.minsize(700, 470)
+        self.title("Work Queue & Excel Tools")
+        self.geometry("1180x720")
+        self.minsize(940, 600)
 
         self.events: queue.Queue[tuple] = queue.Queue()
         self.running = False
@@ -48,10 +58,12 @@ class ExcelToolsApp(tk.Tk):
         root = ttk.Frame(self, padding=20)
         root.pack(fill="both", expand=True)
 
-        ttk.Label(root, text="Excel Tools", style="Title.TLabel").pack(anchor="w")
+        ttk.Label(root, text="Work Queue & Excel Tools", style="Title.TLabel").pack(
+            anchor="w"
+        )
         ttk.Label(
             root,
-            text="Choose a tool, select its input, and run it from one window.",
+            text="Manage your queue and run your Excel utilities from one window.",
         ).pack(anchor="w", pady=(2, 16))
 
         body = ttk.Frame(root)
@@ -61,6 +73,13 @@ class ExcelToolsApp(tk.Tk):
 
         sidebar = ttk.Frame(body, padding=(0, 0, 18, 0))
         sidebar.grid(row=0, column=0, sticky="ns")
+        ttk.Button(
+            sidebar,
+            text="Queue Board",
+            style="Tool.TButton",
+            width=20,
+            command=lambda: self._show_tool("queue"),
+        ).pack(fill="x", pady=(0, 6))
         ttk.Button(
             sidebar,
             text="Excel Splitter",
@@ -75,6 +94,13 @@ class ExcelToolsApp(tk.Tk):
             width=20,
             command=lambda: self._show_tool("cbt"),
         ).pack(fill="x")
+        ttk.Button(
+            sidebar,
+            text="Geographic Cleaner",
+            style="Tool.TButton",
+            width=20,
+            command=lambda: self._show_tool("geographic"),
+        ).pack(fill="x", pady=(6, 0))
 
         self.content = ttk.Frame(body, padding=18, relief="solid", borderwidth=1)
         self.content.grid(row=0, column=1, sticky="nsew")
@@ -95,6 +121,14 @@ class ExcelToolsApp(tk.Tk):
         self.open_output_button.pack(anchor="e", pady=(6, 0))
 
         base = application_dir()
+        data_dir = base / "Data"
+        try:
+            data_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            # QueueBoard will display a user-facing storage error when needed.
+            pass
+        self.queue_data_file = data_dir / "queue_board.json"
+        self.settings_file = data_dir / "settings.json"
         self.split_input = tk.StringVar()
         self.split_output = tk.StringVar(
             value=str(base / "Output" / "ExcelSplitter")
@@ -103,20 +137,48 @@ class ExcelToolsApp(tk.Tk):
         self.cbt_input = tk.StringVar()
         self.cbt_output = tk.StringVar(value=str(base / "Output" / "CBT"))
         self.cbt_sheet = tk.StringVar(value="Sheet2")
+        default_metadata = base / "Metadata"
+        try:
+            default_metadata.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            # Folder validation provides a user-facing error if the executable
+            # location is not writable and no alternative folder is selected.
+            pass
+        self.geo_input = tk.StringVar()
+        self.geo_metadata = tk.StringVar(value=str(default_metadata))
+        self.geo_output = tk.StringVar(
+            value=str(base / "Output" / "GeographicCleaner")
+        )
 
-        self._show_tool("splitter")
+        self._show_tool("queue")
 
     def _show_tool(self, tool: str):
         if self.running:
             return
         for child in self.content.winfo_children():
             child.destroy()
+        self.content.rowconfigure(0, weight=0)
         self.content.columnconfigure(1, weight=1)
 
-        if tool == "splitter":
+        if tool == "queue":
+            self._build_queue_board()
+        elif tool == "splitter":
             self._build_splitter_form()
-        else:
+        elif tool == "cbt":
             self._build_cbt_form()
+        else:
+            self._build_geographic_form()
+
+    def _build_queue_board(self):
+        self.content.rowconfigure(0, weight=1)
+        board = QueueBoard(
+            self.content,
+            data_file=self.queue_data_file,
+            settings_file=self.settings_file,
+            startup_command=application_startup_command(),
+            status_callback=self.status.set,
+        )
+        board.grid(row=0, column=0, columnspan=3, sticky="nsew")
 
     def _build_splitter_form(self):
         ttk.Label(
@@ -150,6 +212,27 @@ class ExcelToolsApp(tk.Tk):
             self.content, text="Create Report", command=self._start_cbt
         ).grid(row=4, column=0, columnspan=3, sticky="w", pady=(18, 0))
 
+    def _build_geographic_form(self):
+        ttk.Label(
+            self.content, text="Geographic Name Cleaner", style="Heading.TLabel"
+        ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
+        ttk.Label(
+            self.content,
+            text=(
+                "Uses regions.xlsx, provinces.xlsx, and municipalities.xlsx "
+                "from the Metadata folder."
+            ),
+            wraplength=470,
+        ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(0, 8))
+        self._file_row(2, "Input workbook", self.geo_input)
+        self._folder_row(3, "Metadata folder", self.geo_metadata)
+        self._folder_row(4, "Output folder", self.geo_output)
+        ttk.Button(
+            self.content,
+            text="Fix Geographic Names",
+            command=self._start_geographic,
+        ).grid(row=5, column=0, columnspan=3, sticky="w", pady=(18, 0))
+
     def _file_row(self, row: int, label: str, variable: tk.StringVar):
         ttk.Label(self.content, text=label).grid(row=row, column=0, sticky="w", pady=8)
         ttk.Entry(self.content, textvariable=variable).grid(
@@ -175,7 +258,7 @@ class ExcelToolsApp(tk.Tk):
     def _choose_file(self, variable: tk.StringVar):
         filename = filedialog.askopenfilename(
             title="Select Excel workbook",
-            filetypes=[("Excel workbooks", "*.xlsx *.xlsm"), ("All files", "*.*")],
+            filetypes=[("Excel workbooks", "*.xlsx")],
         )
         if filename:
             variable.set(filename)
@@ -258,13 +341,54 @@ class ExcelToolsApp(tk.Tk):
 
         threading.Thread(target=work, daemon=True).start()
 
+    def _start_geographic(self):
+        try:
+            input_file = self._validate_input_file(self.geo_input.get())
+            metadata_dir = self._validate_existing_dir(
+                self.geo_metadata.get(), "metadata"
+            )
+            output_dir = self._validate_output_dir(self.geo_output.get())
+        except (ValueError, FileNotFoundError, NotADirectoryError) as error:
+            messagebox.showerror("Invalid selection", str(error))
+            return
+
+        self._set_running("Loading geographic metadata...")
+        self.progress.configure(mode="determinate", maximum=100, value=0)
+
+        def work():
+            try:
+
+                def progress(current, total, message):
+                    self.events.put(("progress", current / total * 100, message))
+
+                result = clean_geographic_names(
+                    input_file,
+                    metadata_dir,
+                    output_dir,
+                    progress_callback=progress,
+                )
+                message = (
+                    f"Corrected {result.cells_changed} cell(s) across "
+                    f"{result.sheets_processed} worksheet(s). "
+                    f"{result.review_count} value(s) need review.\n\n"
+                    f"Corrected file: {result.output_file.name}\n"
+                    f"Report: {result.report_file.name}"
+                )
+                self.events.put(("success", output_dir, message))
+            except Exception as error:
+                self.events.put(("error", error))
+
+        threading.Thread(target=work, daemon=True).start()
+
     @staticmethod
     def _validate_input_file(value: str) -> Path:
         path = Path(value.strip())
         if not path.is_file():
             raise FileNotFoundError("Please select an existing Excel workbook.")
-        if path.suffix.lower() not in {".xlsx", ".xlsm"}:
-            raise ValueError("Please select an .xlsx or .xlsm workbook.")
+        if path.suffix.lower() != ".xlsx":
+            raise ValueError(
+                "Please select an .xlsx workbook. Macro-enabled files are blocked."
+            )
         return path
 
     @staticmethod
@@ -275,6 +399,15 @@ class ExcelToolsApp(tk.Tk):
         path.mkdir(parents=True, exist_ok=True)
         if not path.is_dir():
             raise NotADirectoryError("The selected output location is not a folder.")
+        return path
+
+    @staticmethod
+    def _validate_existing_dir(value: str, label: str) -> Path:
+        if not value.strip():
+            raise NotADirectoryError(f"Please select a {label} folder.")
+        path = Path(value.strip())
+        if not path.is_dir():
+            raise NotADirectoryError(f"The selected {label} folder does not exist.")
         return path
 
     def _set_running(self, message: str):
