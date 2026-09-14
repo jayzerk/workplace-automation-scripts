@@ -29,6 +29,9 @@ __pycache__/
 .audit-cache/
 .audit-tmp/
 
+# Local tests
+tests/
+
 # Local environment settings
 .env
 .env.*
