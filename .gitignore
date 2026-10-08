@@ -4,6 +4,7 @@ Output/ExcelSplitter/*
 Output/CBT/*
 Output/GeographicCleaner/*
 Data/*
+/forAgent/*
 
 !Input/ExcelSplitter/.gitkeep
 !Input/CBT/.gitkeep

@@ -10,7 +10,12 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from Scripts.excel_tools import consolidate_cbt, split_excel
+from Scripts.excel_tools import (
+    consolidate_cbt,
+    format_assessed_certified_report,
+    format_pwd_report,
+    split_excel,
+)
 from Scripts.geographic_cleaner import clean_geographic_names
 from Scripts.queue_board import QueueBoard
 
@@ -101,6 +106,20 @@ class ExcelToolsApp(tk.Tk):
             width=20,
             command=lambda: self._show_tool("geographic"),
         ).pack(fill="x", pady=(6, 0))
+        ttk.Button(
+            sidebar,
+            text="PWD Data",
+            style="Tool.TButton",
+            width=20,
+            command=lambda: self._show_tool("pwd"),
+        ).pack(fill="x", pady=(6, 0))
+        ttk.Button(
+            sidebar,
+            text="Assessed & Certified",
+            style="Tool.TButton",
+            width=20,
+            command=lambda: self._show_tool("assessed_certified"),
+        ).pack(fill="x", pady=(6, 0))
 
         self.content = ttk.Frame(body, padding=18, relief="solid", borderwidth=1)
         self.content.grid(row=0, column=1, sticky="nsew")
@@ -149,6 +168,14 @@ class ExcelToolsApp(tk.Tk):
         self.geo_output = tk.StringVar(
             value=str(base / "Output" / "GeographicCleaner")
         )
+        self.pwd_input = tk.StringVar()
+        self.pwd_output = tk.StringVar(value=str(base / "Output" / "PWD"))
+        self.pwd_sheet = tk.StringVar(value="Sheet2")
+        self.ac_input = tk.StringVar()
+        self.ac_output = tk.StringVar(
+            value=str(base / "Output" / "AssessedCertified")
+        )
+        self.ac_sheet = tk.StringVar(value="Sheet2")
 
         self._show_tool("queue")
 
@@ -166,6 +193,10 @@ class ExcelToolsApp(tk.Tk):
             self._build_splitter_form()
         elif tool == "cbt":
             self._build_cbt_form()
+        elif tool == "pwd":
+            self._build_pwd_form()
+        elif tool == "assessed_certified":
+            self._build_assessed_certified_form()
         else:
             self._build_geographic_form()
 
@@ -231,6 +262,59 @@ class ExcelToolsApp(tk.Tk):
             self.content,
             text="Fix Geographic Names",
             command=self._start_geographic,
+        ).grid(row=5, column=0, columnspan=3, sticky="w", pady=(18, 0))
+
+    def _build_pwd_form(self):
+        ttk.Label(
+            self.content, text="PWD Data Normalization", style="Heading.TLabel"
+        ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
+        ttk.Label(
+            self.content,
+            text=(
+                "Normalizes PWD enrollment records with disaggregated disability "
+                "columns into the standardized report format. Unmapped fields are filled with N/A."
+            ),
+            wraplength=470,
+        ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(0, 8))
+        self._file_row(2, "Input workbook", self.pwd_input)
+        self._folder_row(3, "Output folder", self.pwd_output)
+        ttk.Label(self.content, text="Worksheet name").grid(
+            row=4, column=0, sticky="w", pady=8
+        )
+        ttk.Entry(self.content, textvariable=self.pwd_sheet, width=24).grid(
+            row=4, column=1, sticky="w", padx=(12, 8), pady=8
+        )
+        ttk.Button(
+            self.content, text="Format PWD Data", command=self._start_pwd
+        ).grid(row=5, column=0, columnspan=3, sticky="w", pady=(18, 0))
+
+    def _build_assessed_certified_form(self):
+        ttk.Label(
+            self.content,
+            text="Assessed & Certified PWD Normalization",
+            style="Heading.TLabel",
+        ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 8))
+        ttk.Label(
+            self.content,
+            text=(
+                "Normalizes Assessed and Certified PWD records across disaggregated "
+                "disability, sex, and status tiers into the standardized report format. "
+                "Client type defaults to PWD."
+            ),
+            wraplength=470,
+        ).grid(row=1, column=0, columnspan=3, sticky="w", pady=(0, 8))
+        self._file_row(2, "Input workbook", self.ac_input)
+        self._folder_row(3, "Output folder", self.ac_output)
+        ttk.Label(self.content, text="Worksheet name").grid(
+            row=4, column=0, sticky="w", pady=8
+        )
+        ttk.Entry(self.content, textvariable=self.ac_sheet, width=24).grid(
+            row=4, column=1, sticky="w", padx=(12, 8), pady=8
+        )
+        ttk.Button(
+            self.content,
+            text="Format Assessed & Certified Data",
+            command=self._start_assessed_certified,
         ).grid(row=5, column=0, columnspan=3, sticky="w", pady=(18, 0))
 
     def _file_row(self, row: int, label: str, variable: tk.StringVar):
@@ -375,6 +459,72 @@ class ExcelToolsApp(tk.Tk):
                     f"Report: {result.report_file.name}"
                 )
                 self.events.put(("success", output_dir, message))
+            except Exception as error:
+                self.events.put(("error", error))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _start_pwd(self):
+        try:
+            input_file = self._validate_input_file(self.pwd_input.get())
+            output_dir = self._validate_output_dir(self.pwd_output.get())
+            sheet_name = self.pwd_sheet.get().strip() or None
+        except (ValueError, FileNotFoundError, NotADirectoryError) as error:
+            messagebox.showerror("Invalid selection", str(error))
+            return
+
+        self._set_running("Processing PWD enrollment data...")
+        self.progress.configure(mode="determinate", maximum=100, value=0)
+
+        def work():
+            try:
+                def progress(current, total, message):
+                    self.events.put(("progress", current / total * 100, message))
+
+                output_file = format_pwd_report(
+                    input_file,
+                    output_dir,
+                    sheet_name=sheet_name,
+                    progress_callback=progress,
+                )
+                self.events.put(
+                    ("success", output_dir, f"PWD report created: {output_file.name}")
+                )
+            except Exception as error:
+                self.events.put(("error", error))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _start_assessed_certified(self):
+        try:
+            input_file = self._validate_input_file(self.ac_input.get())
+            output_dir = self._validate_output_dir(self.ac_output.get())
+            sheet_name = self.ac_sheet.get().strip() or None
+        except (ValueError, FileNotFoundError, NotADirectoryError) as error:
+            messagebox.showerror("Invalid selection", str(error))
+            return
+
+        self._set_running("Processing Assessed & Certified PWD data...")
+        self.progress.configure(mode="determinate", maximum=100, value=0)
+
+        def work():
+            try:
+                def progress(current, total, message):
+                    self.events.put(("progress", current / total * 100, message))
+
+                output_file = format_assessed_certified_report(
+                    input_file,
+                    output_dir,
+                    sheet_name=sheet_name,
+                    progress_callback=progress,
+                )
+                self.events.put(
+                    (
+                        "success",
+                        output_dir,
+                        f"Assessed & Certified report created: {output_file.name}",
+                    )
+                )
             except Exception as error:
                 self.events.put(("error", error))
 

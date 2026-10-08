@@ -8,6 +8,8 @@ The app currently includes:
 - **Excel Splitter** — splits a large workbook into smaller files while keeping the column headers.
 - **CBT Consolidation** — reads the expected CBT worksheet layout and creates a summary report containing gender totals and unique provider qualification counts.
 - **Geographic Name Cleaner** — standardizes region, province, and municipality names using canonical Excel files in the `Metadata` folder.
+- **PWD Data** — normalizes PWD enrollment records with merged disaggregated disability columns into a standardized tabular report matching the target format.
+- **Assessed & Certified** — normalizes PWD records across 3-tier hierarchies (disability, sex, and assessed/certified status) into the standardized report format.
 
 ## Installing the project
 
@@ -149,6 +151,26 @@ province / provinces
 municipality / municipalities
 ```
 
+### PWD Data Normalization
+
+1. Select **PWD Data**.
+2. Browse to the PWD enrollment workbook (.xlsx).
+3. Choose an output folder (defaults to `Output\PWD`).
+4. Enter the worksheet name (defaults to `Sheet2` or auto-detected).
+5. Click **Format PWD Data**.
+
+The tool identifies the merged disability headers on row 1, unpivots them by sex (`Male` / `Female`, excluding `Total`), maps metadata columns, and populates unmapped fields with `N/A` (with `Client type` defaulting to `PWD`). The resulting file is formatted with the exact 15 columns of the standardized report.
+
+### Assessed & Certified Normalization
+
+1. Select **Assessed & Certified**.
+2. Browse to the Assessed & Certified workbook (.xlsx).
+3. Choose an output folder (defaults to `Output\AssessedCertified`).
+4. Enter the worksheet name (defaults to `Sheet2` or auto-detected).
+5. Click **Format Assessed & Certified Data**.
+
+The tool handles 3-tier headers: disability group (row 1), sex (row 2: `Male` / `Female`), and status (row 3: `Assessed` / `Certified`). It maps `Assessment Center` to `provider`, sets `Client type` to `PWD`, and formats into the standard 15-column schema.
+
 It creates a corrected copy and a separate match report. The original workbook
 is never overwritten. Ambiguous and low-confidence values remain unchanged and
 are included in the report for review.
@@ -181,6 +203,8 @@ The command-line versions are still available:
 ```powershell
 python Scripts\excel-splitter.py
 python Scripts\cbt-consolidation.py
+python Scripts\pwd-data.py
+python Scripts\assessed-certified.py
 ```
 
 These scripts use the corresponding folders under `Input` and `Output`, while the desktop app lets you select files and folders from anywhere on your computer.
@@ -195,7 +219,11 @@ workplace-automation-scripts/
 ├── Scripts/
 │   ├── excel_tools.py
 │   ├── excel-splitter.py
-│   └── cbt-consolidation.py
+│   ├── cbt-consolidation.py
+│   ├── pwd_data.py
+│   ├── pwd-data.py
+│   ├── assessed_certified.py
+│   └── assessed-certified.py
 ├── Input/
 ├── Metadata/
 ├── Data/

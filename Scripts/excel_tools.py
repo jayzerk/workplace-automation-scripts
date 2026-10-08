@@ -10,6 +10,16 @@ import pandas as pd
 
 ProgressCallback = Callable[[int, int, Path], None]
 
+try:
+    from Scripts.pwd_data import format_pwd_report
+except ImportError:
+    from pwd_data import format_pwd_report
+
+try:
+    from Scripts.assessed_certified import format_assessed_certified_report
+except ImportError:
+    from assessed_certified import format_assessed_certified_report
+
 
 def split_excel(
     input_file: str | Path,
